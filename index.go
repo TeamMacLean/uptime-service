@@ -48,7 +48,7 @@ type Site struct {
 
 type Response struct {
 	SiteID       string  `json:"siteID"`
-	CreatedAt    int64   `json:"createdAt"`
+	Date         string   `json:"date"`
 	Up           bool    `json:"up"`
 	StatusCode   int     `json:"statusCode"`
 	Status       string  `json:"status"`
@@ -165,7 +165,6 @@ func postResponse(url string, response Response) (error) {
 		return errors.New("got non 200 response code")
 	}
 
-
 	return nil
 }
 
@@ -229,9 +228,10 @@ func doRequest(site Site) (err error, response Response) {
 	result, err := http.Get(site.URL)
 	//defer result.Body.Close()
 
+	timeNow := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00");
 	if err != nil {
 		fmt.Println("failed to reach", site.Name)
-		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", CreatedAt: time.Now().Unix(), ResponseTime: -1, Up: false}
+		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", Date: timeNow, ResponseTime: -1, Up: false}
 	}
 
 	elapsed := time.Since(start).Seconds() * 1e3
@@ -242,7 +242,7 @@ func doRequest(site Site) (err error, response Response) {
 		Up:           result.StatusCode == 200,
 		Status:       result.Status,
 		StatusCode:   result.StatusCode,
-		CreatedAt:    time.Now().Unix(),
+		Date:         timeNow,
 		ResponseTime: elapsed,
 		SiteID:       site.ID,
 	}
