@@ -3,29 +3,31 @@ package main
 // kill $(cat pid)
 
 import (
-	"golang.org/x/crypto/ssh/terminal"
-	"github.com/fatih/color"
 	"fmt"
 	"net/http"
 	"time"
-	"os"
-	"bufio"
-	"syscall"
-	"strings"
 	"errors"
 	"encoding/json"
 	"bytes"
-	"strconv"
-	"github.com/jasonlvhit/gocron"
 	"github.com/sevlyar/go-daemon"
-	"flag"
+	"github.com/tkanos/gonfig"
+	"github.com/jasonlvhit/gocron"
 	"log"
+	"os"
 )
 
-var SiteURL = "http://127.0.0.1:3000"
+type Configuration struct {
+	Name     string
+	Server   string
+	Email    string
+	Password string
+	Interval uint64
+}
 
+var SiteURL = ""
 var username = ""
 var password = ""
+var ProbeName = "Unknown"
 
 var minutesBetweenChecks uint64 = 5
 
@@ -53,19 +55,22 @@ type Response struct {
 	ResponseTime float64 `json:"responseTime"`
 }
 
-var (
-	signal = flag.String("s", "", `send signal to the daemon
-        stop — shutdown`)
-)
-
-var scheduler = gocron.NewScheduler()
-
 func main() {
 
-	flag.Parse()
-	daemon.AddCommand(daemon.StringFlag(signal, "stop"), syscall.SIGTERM, termHandler)
+	//update variables from config
+	updateFromConfig()
 
-	termHandler(nil)
+	if !daemon.WasReborn() {
+		//RUN IF PARENT
+		//test auth
+		fmt.Println("testing auth")
+		err, _ := testAuth()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		fmt.Println("Auth Successful")
+	}
 
 	cntxt := &daemon.Context{
 		PidFileName: "pid",
@@ -86,76 +91,42 @@ func main() {
 		return
 	}
 
-	_, err := cntxt.Reborn()
-	if err != nil {
-		fmt.Println("Unable to run: ", err)
+	_, cntxterr := cntxt.Reborn()
+	if cntxterr != nil {
+		fmt.Println("Unable to run: ", cntxterr)
 	}
 
 	defer cntxt.Release()
 
 	if daemon.WasReborn() {
-		//CHILD
-		fmt.Println("username/password:", username, password)
-		fmt.Println(color.GreenString("Starting Daemon"))
 		startSchedule()
-	} else {
-		//PARENT
-		authenticate()
-		requestUpdateInterval()
 	}
+
 }
 
-func requestUpdateInterval() {
-	fmt.Print("How ofter do you want to check sites? (minutes):")
-	reader := bufio.NewReader(os.Stdin)
-	interval, _ := reader.ReadString('\n')
-	intervalNumber, intParseError := strconv.ParseUint(interval, 10, 64)
-	if intParseError == nil {
-		minutesBetweenChecks = intervalNumber
+func updateFromConfig() {
+	configuration := Configuration{}
+	err := gonfig.GetConf("config.json", &configuration)
+	if err != nil {
+		panic(err)
 	}
 
-	fmt.Println(color.BlueString("Checking every"), color.RedString(fmt.Sprint(minutesBetweenChecks)), color.BlueString("minutes"))
+	ProbeName = configuration.Name
+	username = configuration.Email
+	password = configuration.Password
+	SiteURL = configuration.Server
+	minutesBetweenChecks = configuration.Interval
+
 }
 
 func startSchedule() {
+	scheduler := gocron.NewScheduler()
+	updateSitesList() //do this once so we have a list of sites
+	checkSites()
 
-	updateSitesList() //TODO do this once so we have a list of sites
-
-	//scheduler := gocron.NewScheduler()
 	scheduler.Every(minutesBetweenChecks).Minutes().Do(updateSitesList)
 	scheduler.Every(10).Minutes().Do(checkSites)
 	<-scheduler.Start()
-}
-
-func authenticate() {
-	username, password = credentials()
-	err, ok := testAuth()
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	if !ok {
-		fmt.Println("username and password did not work, please try again");
-		authenticate()
-	} else {
-		fmt.Println(color.GreenString("Signed in"))
-	}
-}
-func credentials() (string, string) {
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Print("Enter Email: ")
-	username, _ := reader.ReadString('\n')
-
-	fmt.Print("Enter Password: ")
-	bytePassword, _ := terminal.ReadPassword(int(syscall.Stdin))
-	//if err == nil {
-	//	fmt.Println("\nPassword typed: " + string(bytePassword))
-	//}
-	password := string(bytePassword)
-
-	return strings.TrimSpace(username), strings.TrimSpace(password)
 }
 
 func requestGet(url string) (error, *http.Response) {
@@ -179,10 +150,8 @@ func requestGet(url string) (error, *http.Response) {
 func postResponse(url string, response Response) (error) {
 
 	var jsonStr, _ = json.Marshal(response)
-	//fmt.Println("json string", jsonStr)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 	req.SetBasicAuth(username, password)
-	//req.Header.Set("X-Custom-Header", "myvalue")
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -196,10 +165,6 @@ func postResponse(url string, response Response) (error) {
 		return errors.New("got non 200 response code")
 	}
 
-	//fmt.Println("response Status:", resp.Status)
-	//fmt.Println("response Headers:", resp.Header)
-	//body, _ := ioutil.ReadAll(resp.Body)
-	//fmt.Println("response Body:", string(body))
 
 	return nil
 }
@@ -265,11 +230,8 @@ func doRequest(site Site) (err error, response Response) {
 	//defer result.Body.Close()
 
 	if err != nil {
-
-		//TODO still report back as it just means the site is down
 		fmt.Println("failed to reach", site.Name)
 		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", CreatedAt: time.Now().Unix(), ResponseTime: -1, Up: false}
-		//return err, Response{}
 	}
 
 	elapsed := time.Since(start).Seconds() * 1e3
@@ -286,8 +248,9 @@ func doRequest(site Site) (err error, response Response) {
 	}
 }
 
-func termHandler(sig os.Signal) error {
-	fmt.Println("terminating...")
-	scheduler.Clear()
-	return daemon.ErrStop
-}
+//
+//func termHandler(sig os.Signal) error {
+//	fmt.Println("terminating...")
+//	scheduler.Clear()
+//	return daemon.ErrStop
+//}
