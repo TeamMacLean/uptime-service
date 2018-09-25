@@ -231,7 +231,7 @@ func doRequest(site Site) (err error, response Response) {
 	timeNow := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00");
 	if err != nil {
 		fmt.Println("failed to reach", site.Name)
-		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", Date: timeNow, ResponseTime: -1, Up: false}
+		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", Date: timeNow, ResponseTime: 9999, Up: false}
 	}
 
 	elapsed := time.Since(start).Seconds() * 1e3
