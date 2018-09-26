@@ -17,11 +17,11 @@ import (
 )
 
 type Configuration struct {
-	Name     string
-	Server   string
-	Email    string
-	Password string
-	Interval uint64
+	LocationNickname string
+	Server           string
+	Email            string
+	Password         string
+	Interval         uint64
 }
 
 var SiteURL = ""
@@ -48,11 +48,12 @@ type Site struct {
 
 type Response struct {
 	SiteID       string  `json:"siteID"`
-	Date         string   `json:"date"`
+	Date         string  `json:"date"`
 	Up           bool    `json:"up"`
 	StatusCode   int     `json:"statusCode"`
 	Status       string  `json:"status"`
 	ResponseTime float64 `json:"responseTime"`
+	Source       string  `json:"source"`
 }
 
 func main() {
@@ -111,7 +112,7 @@ func updateFromConfig() {
 		panic(err)
 	}
 
-	ProbeName = configuration.Name
+	ProbeName = configuration.LocationNickname
 	username = configuration.Email
 	password = configuration.Password
 	SiteURL = configuration.Server
@@ -214,7 +215,7 @@ func checkSites() {
 			postingError := postResponse(SiteURL+"/api/responses", response)
 
 			if postingError != nil {
-				fmt.Println("cannot access URL at this time")
+				fmt.Println("cannot access", SiteURL, "at this time")
 			}
 		}
 	}
@@ -231,7 +232,7 @@ func doRequest(site Site) (err error, response Response) {
 	timeNow := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00");
 	if err != nil {
 		fmt.Println("failed to reach", site.Name)
-		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", Date: timeNow, ResponseTime: 9999, Up: false}
+		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", Date: timeNow, ResponseTime: 10000, Up: false, Source: ProbeName}
 	}
 
 	elapsed := time.Since(start).Seconds() * 1e3
@@ -245,12 +246,6 @@ func doRequest(site Site) (err error, response Response) {
 		Date:         timeNow,
 		ResponseTime: elapsed,
 		SiteID:       site.ID,
+		Source:       ProbeName,
 	}
 }
-
-//
-//func termHandler(sig os.Signal) error {
-//	fmt.Println("terminating...")
-//	scheduler.Clear()
-//	return daemon.ErrStop
-//}
