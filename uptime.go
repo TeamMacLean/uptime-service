@@ -3,17 +3,17 @@ package main
 // kill $(cat pid)
 
 import (
-	"fmt"
-	"net/http"
-	"time"
-	"errors"
-	"encoding/json"
 	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/jasonlvhit/gocron"
 	"github.com/sevlyar/go-daemon"
 	"github.com/tkanos/gonfig"
-	"github.com/jasonlvhit/gocron"
 	"log"
+	"net/http"
 	"os"
+	"time"
 )
 
 type Configuration struct {
@@ -157,10 +157,11 @@ func postResponse(url string, response Response) (error) {
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
+	defer resp.Body.Close()
+
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		return errors.New("got non 200 response code")
@@ -227,7 +228,7 @@ func doRequest(site Site) (err error, response Response) {
 	start := time.Now()
 
 	result, err := http.Get(site.URL)
-	//defer result.Body.Close()
+	defer result.Body.Close()
 
 	timeNow := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00");
 	if err != nil {
