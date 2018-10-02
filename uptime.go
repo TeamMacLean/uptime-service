@@ -228,15 +228,15 @@ func doRequest(site Site) (err error, response Response) {
 	start := time.Now()
 
 	result, err := http.Get(site.URL)
-	defer result.Body.Close()
-
 	timeNow := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00");
+	elapsed := time.Since(start).Seconds() * 1e3
+
 	if err != nil {
 		fmt.Println("failed to reach", site.Name)
 		return nil, Response{SiteID: site.ID, StatusCode: 0, Status: "Down", Date: timeNow, ResponseTime: 10000, Up: false, Source: ProbeName}
 	}
 
-	elapsed := time.Since(start).Seconds() * 1e3
+	defer result.Body.Close()
 
 	fmt.Println(site.Name, "responseTime:", elapsed)
 
