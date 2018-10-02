@@ -228,7 +228,7 @@ func doRequest(site Site) (err error, response Response) {
 	start := time.Now()
 
 	result, err := http.Get(site.URL)
-	timeNow := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00");
+	timeNow := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")
 	elapsed := time.Since(start).Seconds() * 1e3
 
 	if err != nil {
